@@ -29,6 +29,22 @@ const gradientStyle: React.CSSProperties = {
 };
 
 export function Upsolver() {
+  const [username, setUsername] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return sessionStorage.getItem("aura:username");
+  });
+
+  if (!username) {
+    return <UsernameGate onSubmit={(name) => {
+      sessionStorage.setItem("aura:username", name);
+      setUsername(name);
+    }} />;
+  }
+
+  return <UpsolverApp username={username} />;
+}
+
+function UpsolverApp({ username }: { username: string }) {
   const [query, setQuery] = useState("");
   const [minRating, setMinRating] = useState<number>(800);
   const [maxRating, setMaxRating] = useState<number>(3500);
@@ -110,12 +126,8 @@ export function Upsolver() {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
-          className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between"
+          className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-center"
         >
-          <div className="flex items-center gap-2">
-            <LogoMark className="w-7 h-7" />
-            <span className="text-sm font-semibold tracking-tight">Aura</span>
-          </div>
           <div className="hidden md:flex items-center gap-8">
             {["Problems", "Contests", "Solutions", "Stats"].map((l, i) => (
               <motion.a
@@ -130,9 +142,6 @@ export function Upsolver() {
               </motion.a>
             ))}
           </div>
-          <button className="hidden md:inline-flex items-center gap-2 rounded-full bg-white text-black font-medium text-sm px-4 py-2 hover:bg-white/90 transition">
-            Open app <ChevronRight className="w-4 h-4" />
-          </button>
         </motion.nav>
 
         {/* Hero */}
@@ -334,14 +343,136 @@ export function Upsolver() {
 
         <footer className="border-t border-white/10 mt-10">
           <div className="max-w-6xl mx-auto px-6 py-8 flex items-center justify-between text-xs text-white/40">
-            <div className="flex items-center gap-2">
-              <LogoMark className="w-4 h-4" />
-              <span>Aura Upsolver</span>
-            </div>
+            <span>Signed in as <span className="text-white/70">{username}</span></span>
             <span>© 2026 Aura. Sharpen the edge.</span>
           </div>
         </footer>
       </div>
+    </div>
+  );
+}
+
+function UsernameGate({ onSubmit }: { onSubmit: (name: string) => void }) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setError("Please enter a username to continue.");
+      return;
+    }
+    if (trimmed.length > 40) {
+      setError("Username must be 40 characters or fewer.");
+      return;
+    }
+    onSubmit(trimmed);
+  };
+
+  return (
+    <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white">
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(900px circle at 15% -10%, rgba(0,210,255,0.10), transparent 60%), radial-gradient(800px circle at 90% 10%, rgba(61,129,227,0.10), transparent 60%)",
+          }}
+        />
+        <div className="hidden md:block absolute top-0 bottom-0 left-1/2 -translate-x-[36rem] w-px bg-white/[0.04]" />
+        <div className="hidden md:block absolute top-0 bottom-0 left-1/2 translate-x-[36rem] w-px bg-white/[0.04]" />
+      </div>
+
+      <svg className="absolute w-0 h-0">
+        <filter id="c3-noise">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" />
+          <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.35 0" />
+          <feComposite in2="SourceGraphic" operator="in" />
+          <feBlend in="SourceGraphic" mode="multiply" />
+        </filter>
+      </svg>
+
+      <main className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 mb-6"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-[#00d2ff]" />
+          Welcome to Aura
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="text-4xl md:text-6xl font-semibold tracking-tight leading-[0.95] text-center"
+        >
+          <span className="block">Every problem you missed.</span>
+          <span className="block animate-shiny" style={gradientStyle}>
+            Now solvable.
+          </span>
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.35 }}
+          className="mt-6 text-white/60 max-w-md text-base leading-[1.55] text-center"
+        >
+          Enter your handle to surface every unsolved problem from your past contests.
+        </motion.p>
+
+        <motion.form
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          onSubmit={(e) => { e.preventDefault(); submit(); }}
+          className="liquid-glass rounded-2xl p-2 mt-10 w-full max-w-md flex items-center gap-2"
+        >
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => { setValue(e.target.value); if (error) setError(null); }}
+            placeholder="Your username"
+            maxLength={40}
+            aria-label="Username"
+            className="flex-1 bg-transparent px-4 py-3 text-sm text-white placeholder:text-white/30 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="inline-flex items-center gap-1.5 rounded-full bg-white text-black text-sm font-semibold px-4 py-2.5 hover:bg-white/90 active:scale-[0.98] transition"
+          >
+            Continue <ChevronRight className="w-4 h-4" />
+          </button>
+        </motion.form>
+
+        <div className="h-6 mt-3">
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                key={error}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="text-xs text-red-400/90"
+              >
+                {error}
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="mt-4 text-[11px] uppercase tracking-widest text-white/30"
+        >
+          Press Enter to continue
+        </motion.p>
+      </main>
     </div>
   );
 }
