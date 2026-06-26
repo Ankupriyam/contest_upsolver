@@ -129,7 +129,7 @@ function UpsolverApp({ username }: { username: string }) {
           className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-center"
         >
           <div className="hidden md:flex items-center gap-8">
-            {["Problems", "Contests", "Solutions", "Stats"].map((l, i) => (
+            {["Problems", "Contests", "Solutions"].map((l, i) => (
               <motion.a
                 key={l}
                 href="#"
@@ -342,9 +342,8 @@ function UpsolverApp({ username }: { username: string }) {
         </section>
 
         <footer className="border-t border-white/10 mt-10">
-          <div className="max-w-6xl mx-auto px-6 py-8 flex items-center justify-between text-xs text-white/40">
-            <span>Signed in as <span className="text-white/70">{username}</span></span>
-            <span>© 2026 Aura. Sharpen the edge.</span>
+          <div className="max-w-6xl mx-auto px-6 py-8 text-xs text-white/40">
+            Signed in as <span className="text-white/70">{username}</span>
           </div>
         </footer>
       </div>
