@@ -480,6 +480,7 @@ function UsernameGate({ onSubmit }: { onSubmit: (name: string) => void }) {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white">
+      <BackgroundVideo />
       <div className="pointer-events-none fixed inset-0 z-0">
         <div
           className="absolute inset-0"
