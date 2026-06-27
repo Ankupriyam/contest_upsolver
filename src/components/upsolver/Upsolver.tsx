@@ -796,7 +796,8 @@ function ProblemCard({ problem, index }: { problem: RuntimeProblem; index: numbe
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.35, delay: Math.min(index * 0.02, 0.2) }}
-      className="liquid-glass rounded-2xl p-5 flex flex-col gap-4 group hover:-translate-y-0.5 transition"
+      className="liquid-glass rounded-2xl p-5 flex flex-col gap-4 group hover:-translate-y-0.5 transition cursor-pointer"
+      onClick={() => window.open(problem.url, "_blank", "noopener,noreferrer")}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-white/40 flex-1 min-w-0">
@@ -853,13 +854,19 @@ function ProblemCard({ problem, index }: { problem: RuntimeProblem; index: numbe
 
       <div className="flex items-center gap-2 mt-auto pt-2">
         <button
-          onClick={() => window.open(problem.url, "_blank", "noopener,noreferrer")}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(problem.url, "_blank", "noopener,noreferrer");
+          }}
           className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-white text-black text-sm font-semibold px-4 py-2 hover:bg-white/90 transition"
         >
           Solve <ChevronRight className="w-4 h-4" />
         </button>
         <button
-          onClick={() => window.open(problem.contestUrl, "_blank", "noopener,noreferrer")}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(problem.contestUrl, "_blank", "noopener,noreferrer");
+          }}
           className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 text-white/80 text-sm font-medium px-3 py-2 hover:bg-white/5 hover:text-white transition"
         >
           <ArrowUpRight className="w-3.5 h-3.5" /> Contest
