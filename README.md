@@ -43,22 +43,18 @@ Make sure you have [Node.js](https://nodejs.org/) (v18+) and npm installed.
    ```
    The application will be available at `http://localhost:5173`.
 
-## 📦 Deployment (Cloudflare)
+## 📦 Deployment (Vercel)
 
-This project is configured out-of-the-box to deploy to Cloudflare via Nitro's `cloudflare-module` preset. 
+This project is deployed on Vercel.
 
 1. **Build the production bundle:**
    ```bash
    npm run build
    ```
 
-2. **Deploy to Cloudflare:**
+2. **Deploy to Vercel:**
    ```bash
-   npx wrangler deploy
-   ```
-   *or using Nitro directly:*
-   ```bash
-   npx nitro deploy --prebuilt
+   npx vercel --prod
    ```
 
 ## 🤝 Contributing
