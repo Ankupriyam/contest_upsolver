@@ -1,3 +1,5 @@
+export type ProblemStatus = "solved" | "attempted" | "unattempted";
+
 export interface Problem {
   id: number;
   name: string;
@@ -7,7 +9,9 @@ export interface Problem {
   tags: string[];
   contestDate: string;
   solved: boolean;
+  status: ProblemStatus;
 }
+
 
 const TAG_POOL = [
   "dp", "greedy", "graphs", "math", "implementation", "binary search",
@@ -57,6 +61,8 @@ export const MOCK_PROBLEMS: Problem[] = (() => {
     const tagCount = 1 + Math.floor(rand() * 3);
     const tags = new Set<string>();
     while (tags.size < tagCount) tags.add(TAG_POOL[Math.floor(rand() * TAG_POOL.length)]);
+    const statusRoll = rand();
+    const status: ProblemStatus = statusRoll < 0.15 ? "solved" : statusRoll < 0.42 ? "attempted" : "unattempted";
     arr.push({
       id: i + 1,
       name: NAMES[i % NAMES.length] + (i >= NAMES.length ? " II" : ""),
@@ -65,7 +71,8 @@ export const MOCK_PROBLEMS: Problem[] = (() => {
       rating,
       tags: Array.from(tags),
       contestDate: contest.date,
-      solved: false,
+      solved: status === "solved",
+      status,
     });
   }
   return arr;

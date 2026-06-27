@@ -4,9 +4,9 @@ import { Upsolver } from "@/components/upsolver/Upsolver";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Aura — Contest Upsolver" },
+      { title: "Contest Upsolver" },
       { name: "description", content: "Find and upsolve every problem you missed during live contests." },
-      { property: "og:title", content: "Aura — Contest Upsolver" },
+      { property: "og:title", content: "Contest Upsolver" },
       { property: "og:description", content: "Find and upsolve every problem you missed during live contests." },
     ],
   }),

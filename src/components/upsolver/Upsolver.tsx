@@ -1,10 +1,10 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search, ChevronRight, ChevronDown, X, Filter, Calendar,
   Trophy, Tag as TagIcon, ArrowUpRight, Loader2, Inbox,
 } from "lucide-react";
-import { MOCK_PROBLEMS, ALL_TAGS, ALL_CONTESTS, type Problem } from "./mockData";
+import { ALL_TAGS, ALL_CONTESTS, type Problem, type ProblemStatus } from "./mockData";
 
 type SortKey = "rating-asc" | "rating-desc" | "date-desc" | "date-asc" | "name-asc";
 
@@ -16,6 +16,12 @@ const RATING_COLOR = (r: number) => {
   if (r < 2100) return "#a855f7";
   if (r < 2400) return "#f59e0b";
   return "#ef4444";
+};
+
+const STATUS_META: Record<ProblemStatus, { label: string; color: string; glow: string }> = {
+  solved: { label: "Solved", color: "#22c55e", glow: "rgba(34,197,94,0.22)" },
+  attempted: { label: "Attempted", color: "#f59e0b", glow: "rgba(245,158,11,0.22)" },
+  unattempted: { label: "Unattempted", color: "#a3a3a3", glow: "rgba(163,163,163,0.18)" },
 };
 
 const gradientStyle: React.CSSProperties = {
@@ -30,6 +36,65 @@ const gradientStyle: React.CSSProperties = {
 
 const BG_VIDEO_URL =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260508_064122_c4750c0e-7476-4b44-94a2-a85a65c63bf2.mp4";
+
+type ApiContest = {
+  contestId: number;
+  contestName: string;
+  contestDate: string | null;
+  problem: {
+    index: string;
+    name: string;
+    rating: number | null;
+    tags: string[];
+    url: string;
+    status: Exclude<ProblemStatus, "solved">;
+  };
+};
+
+type ApiResponse = {
+  contests: ApiContest[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+  filters?: {
+    contests?: Array<{ contestId: number; contestName: string }>;
+    tags?: string[];
+  };
+  error?: string;
+};
+
+type RuntimeProblem = Problem & {
+  index: string;
+  url: string;
+  contestUrl: string;
+};
+
+/* ── Contest category helpers ─────────────────────────────────────── */
+
+type ContestCategory = "all" | "div1" | "div2" | "div3" | "div4" | "div12" | "educational" | "other";
+
+const CONTEST_CATEGORIES: { value: ContestCategory; label: string }[] = [
+  { value: "all", label: "All contests" },
+  { value: "div12", label: "Div. 1 + Div. 2" },
+  { value: "div1", label: "Div. 1" },
+  { value: "div2", label: "Div. 2" },
+  { value: "div3", label: "Div. 3" },
+  { value: "div4", label: "Div. 4" },
+  { value: "educational", label: "Educational" },
+  { value: "other", label: "Other" },
+];
+
+function classifyContest(name: string): ContestCategory {
+  const n = name.toLowerCase();
+  if (/educational/i.test(n)) return "educational";
+  // Match "Div. 1 + Div. 2" or "Div. 1+Div. 2" patterns
+  if (/div\.\s*1\s*\+\s*div\.\s*2/i.test(n) || /div\.\s*1\s*\+\s*2/i.test(n)) return "div12";
+  if (/div\.\s*4/i.test(n)) return "div4";
+  if (/div\.\s*3/i.test(n)) return "div3";
+  if (/div\.\s*2/i.test(n)) return "div2";
+  if (/div\.\s*1/i.test(n)) return "div1";
+  return "other";
+}
 
 /**
  * Fullscreen ambient background video with a seamless, never-resetting loop.
@@ -126,12 +191,12 @@ function BackgroundVideo() {
 export function Upsolver() {
   const [username, setUsername] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    return sessionStorage.getItem("aura:username");
+    return sessionStorage.getItem("upsolver:username");
   });
 
   if (!username) {
     return <UsernameGate onSubmit={(name) => {
-      sessionStorage.setItem("aura:username", name);
+      sessionStorage.setItem("upsolver:username", name);
       setUsername(name);
     }} />;
   }
@@ -144,22 +209,97 @@ function UpsolverApp({ username }: { username: string }) {
   const [minRating, setMinRating] = useState<number>(800);
   const [maxRating, setMaxRating] = useState<number>(3500);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedContest, setSelectedContest] = useState<number | "all">("all");
-  const [sort, setSort] = useState<SortKey>("date-desc");
+  const [selectedCategory, setSelectedCategory] = useState<ContestCategory>("all");
+  const [sort] = useState<SortKey>("date-desc");
   const [loading, setLoading] = useState(true);
+  const [problems, setProblems] = useState<RuntimeProblem[]>([]);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [availableTags, setAvailableTags] = useState<string[]>(ALL_TAGS);
   const [tagsOpen, setTagsOpen] = useState(false);
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(t);
+  // Refs for scroll navigation
+  const controlsRef = useRef<HTMLElement | null>(null);
+  const resultsRef = useRef<HTMLElement | null>(null);
+
+  const scrollToControls = useCallback(() => {
+    controlsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
+  const scrollToResults = useCallback(() => {
+    resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      minRating: String(minRating),
+      maxRating: String(maxRating),
+      sort,
+      limit: "200",
+    });
+
+    const trimmedQuery = query.trim();
+    if (trimmedQuery) params.set("search", trimmedQuery);
+    if (selectedTags.length > 0) params.set("tags", selectedTags.join(","));
+
+    setLoading(true);
+    setApiError(null);
+
+    fetch(`/api/upsolve/${encodeURIComponent(username)}?${params.toString()}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const text = await response.text();
+        let data: ApiResponse;
+        try {
+          data = JSON.parse(text) as ApiResponse;
+        } catch {
+          throw new Error("Unable to load problems. The server returned an invalid response.");
+        }
+        if (!response.ok) throw new Error(data.error ?? "Unable to load upsolve data.");
+        return data;
+      })
+      .then((data) => {
+        setProblems(
+          data.contests.map((contest, index) => ({
+            id: contest.contestId * 1000 + index,
+            index: contest.problem.index,
+            name: contest.problem.name,
+            contestName: contest.contestName,
+            contestId: contest.contestId,
+            rating: contest.problem.rating ?? 0,
+            tags: contest.problem.tags,
+            contestDate: contest.contestDate ?? new Date(0).toISOString(),
+            solved: false,
+            status: contest.problem.status,
+            url: contest.problem.url,
+            contestUrl: `https://codeforces.com/contest/${contest.contestId}`,
+          })),
+        );
+
+        if (data.filters?.tags) setAvailableTags(data.filters.tags.length ? data.filters.tags : ALL_TAGS);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setProblems([]);
+        setApiError(error instanceof Error ? error.message : "Unable to load upsolve data.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [username, query, minRating, maxRating, selectedTags, sort]);
+
   const filtered = useMemo(() => {
-    let list = MOCK_PROBLEMS.filter((p) => {
+    let list = problems.filter((p) => {
       if (query && !p.name.toLowerCase().includes(query.toLowerCase())) return false;
       if (p.rating < minRating || p.rating > maxRating) return false;
-      if (selectedContest !== "all" && p.contestId !== selectedContest) return false;
       if (selectedTags.length && !selectedTags.every((t) => p.tags.includes(t))) return false;
+      // Filter by contest category
+      if (selectedCategory !== "all") {
+        if (classifyContest(p.contestName) !== selectedCategory) return false;
+      }
       return true;
     });
     list = [...list].sort((a, b) => {
@@ -172,7 +312,7 @@ function UpsolverApp({ username }: { username: string }) {
       }
     });
     return list;
-  }, [query, minRating, maxRating, selectedTags, selectedContest, sort]);
+  }, [problems, query, minRating, maxRating, selectedTags, selectedCategory, sort]);
 
   const toggleTag = (t: string) =>
     setSelectedTags((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
@@ -182,13 +322,12 @@ function UpsolverApp({ username }: { username: string }) {
     setMinRating(800);
     setMaxRating(3500);
     setSelectedTags([]);
-    setSelectedContest("all");
-    setSort("date-desc");
+    setSelectedCategory("all");
   };
 
   const hasFilters =
     query || minRating !== 800 || maxRating !== 3500 ||
-    selectedTags.length > 0 || selectedContest !== "all";
+    selectedTags.length > 0 || selectedCategory !== "all";
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white">
@@ -225,17 +364,20 @@ function UpsolverApp({ username }: { username: string }) {
           className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-center"
         >
           <div className="hidden md:flex items-center gap-8">
-            {["Problems", "Contests", "Solutions"].map((l, i) => (
-              <motion.a
-                key={l}
-                href="#"
+            {[
+              { label: "Problems", onClick: scrollToResults },
+              { label: "Contests", onClick: scrollToControls },
+            ].map((item, i) => (
+              <motion.button
+                key={item.label}
+                onClick={item.onClick}
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 + i * 0.05 }}
                 className="text-white/70 text-sm font-medium hover:text-white transition"
               >
-                {l}
-              </motion.a>
+                {item.label}
+              </motion.button>
             ))}
           </div>
         </motion.nav>
@@ -274,11 +416,11 @@ function UpsolverApp({ username }: { username: string }) {
         </section>
 
         {/* Controls */}
-        <section className="max-w-6xl mx-auto px-6 pb-6">
-          <div className="liquid-glass rounded-2xl p-4 md:p-5">
+        <section ref={controlsRef} className="max-w-6xl mx-auto px-6 pb-6 relative z-30">
+          <div className="liquid-glass rounded-2xl p-4 md:p-5" style={{ overflow: "visible" }}>
             <div className="flex flex-col gap-4">
-              {/* Search */}
-              <div className="flex flex-col md:flex-row gap-3 md:items-center">
+              {/* Search + Contest category */}
+              <div className="flex flex-col md:flex-row gap-3 md:items-center w-full">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                   <input
@@ -289,32 +431,10 @@ function UpsolverApp({ username }: { username: string }) {
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedContest}
-                    onChange={(e) =>
-                      setSelectedContest(e.target.value === "all" ? "all" : Number(e.target.value))
-                    }
-                    className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-white/25 transition min-w-[180px]"
-                  >
-                    <option value="all">All contests</option>
-                    {ALL_CONTESTS.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value as SortKey)}
-                    className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-white/25 transition"
-                  >
-                    <option value="date-desc">Newest contest</option>
-                    <option value="date-asc">Oldest contest</option>
-                    <option value="rating-asc">Rating ↑</option>
-                    <option value="rating-desc">Rating ↓</option>
-                    <option value="name-asc">Name A–Z</option>
-                  </select>
-                </div>
+                <ContestDropdown
+                    value={selectedCategory}
+                    onChange={setSelectedCategory}
+                  />
               </div>
 
               {/* Rating range + tags toggle */}
@@ -373,7 +493,7 @@ function UpsolverApp({ username }: { username: string }) {
                     className="overflow-hidden"
                   >
                     <div className="flex flex-wrap gap-2 pt-1">
-                      {ALL_TAGS.map((t) => {
+                      {availableTags.map((t) => {
                         const on = selectedTags.includes(t);
                         return (
                           <button
@@ -396,14 +516,35 @@ function UpsolverApp({ username }: { username: string }) {
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-xs text-white/40">
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-white/40">
             <span>{loading ? "Loading…" : `${filtered.length} unsolved problems`}</span>
+            {!loading && (
+              <div className="flex items-center gap-4">
+                {(
+                  [
+                    ["attempted", "Attempted"] as const,
+                    ["unattempted", "Unattempted"] as const,
+                  ] as [ProblemStatus, string][]
+                ).map(([status, label]) => (
+                  <div key={status} className="flex items-center gap-1.5">
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ background: STATUS_META[status].color, boxShadow: `0 0 8px ${STATUS_META[status].color}` }}
+                    />
+                    <span className="text-white/60">{label}</span>
+                    <span className="text-white/30">
+                      {filtered.filter((p) => p.status === status).length}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <span>Updated just now</span>
           </div>
         </section>
 
         {/* Results */}
-        <section className="max-w-6xl mx-auto px-6 pb-24">
+        <section ref={resultsRef} className="max-w-6xl mx-auto px-6 pb-24">
           {loading ? (
             <div className="liquid-glass rounded-2xl p-16 flex flex-col items-center justify-center text-white/50">
               <Loader2 className="w-6 h-6 animate-spin mb-3" />
@@ -425,9 +566,11 @@ function UpsolverApp({ username }: { username: string }) {
 
               <div className="relative z-10 flex flex-col items-center">
                 <Inbox className="w-7 h-7 text-white/40 mb-3" />
-                <h3 className="text-base font-semibold">Nothing matches those filters</h3>
+                <h3 className="text-base font-semibold">
+                  {apiError ? "Unable to load problems" : "Nothing matches those filters"}
+                </h3>
                 <p className="text-white/50 text-sm mt-1 max-w-xs">
-                  Try widening the rating range or removing a tag to see more problems.
+                  {apiError ?? "Try widening the rating range or removing a tag to see more problems."}
                 </p>
                 <button
                   onClick={clearAll}
@@ -510,7 +653,7 @@ function UsernameGate({ onSubmit }: { onSubmit: (name: string) => void }) {
           className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-white/40 mb-6"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[#00d2ff]" />
-          Welcome to Aura
+          Welcome to Contest Upsolver
         </motion.div>
 
         <motion.h1
@@ -587,7 +730,64 @@ function UsernameGate({ onSubmit }: { onSubmit: (name: string) => void }) {
   );
 }
 
-function ProblemCard({ problem, index }: { problem: Problem; index: number }) {
+function ContestDropdown({ value, onChange }: { value: ContestCategory; onChange: (v: ContestCategory) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const current = CONTEST_CATEGORIES.find((c) => c.value === value) ?? CONTEST_CATEGORIES[0];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center justify-between gap-2 bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white/80 hover:border-white/25 focus:outline-none focus:border-white/25 transition min-w-[200px] cursor-pointer"
+      >
+        <span className="truncate">{current.label}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-white/40 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 4, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute z-50 right-0 mt-2 min-w-[220px] bg-[#0e1014]/95 backdrop-blur-xl border border-white/10 rounded-xl py-1.5 shadow-2xl shadow-black/60"
+          >
+            {CONTEST_CATEGORIES.map((cat) => {
+              const active = cat.value === value;
+              return (
+                <button
+                  key={cat.value}
+                  onClick={() => { onChange(cat.value); setOpen(false); }}
+                  className={`w-full text-left px-3.5 py-2 text-sm transition-colors ${
+                    active
+                      ? "text-white bg-white/10"
+                      : "text-white/60 hover:text-white hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ProblemCard({ problem, index }: { problem: RuntimeProblem; index: number }) {
   const color = RATING_COLOR(problem.rating);
   return (
     <motion.article
@@ -599,16 +799,33 @@ function ProblemCard({ problem, index }: { problem: Problem; index: number }) {
       className="liquid-glass rounded-2xl p-5 flex flex-col gap-4 group hover:-translate-y-0.5 transition"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-white/40">
-          <Trophy className="w-3 h-3" />
-          <span className="truncate max-w-[180px]">{problem.contestName}</span>
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-white/40 flex-1 min-w-0">
+          <Trophy className="w-3 h-3 shrink-0" />
+          <span className="truncate">{problem.contestName}</span>
         </div>
-        <span
-          className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
-          style={{ color, borderColor: `${color}55`, background: `${color}10` }}
-        >
-          {problem.rating}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border relative"
+            style={{
+              color: STATUS_META[problem.status].color,
+              borderColor: `${STATUS_META[problem.status].color}55`,
+              background: `${STATUS_META[problem.status].color}10`,
+              boxShadow: `0 0 18px ${STATUS_META[problem.status].glow}`,
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: STATUS_META[problem.status].color, boxShadow: `0 0 8px ${STATUS_META[problem.status].color}` }}
+            />
+            {STATUS_META[problem.status].label}
+          </span>
+          <span
+            className="text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+            style={{ color, borderColor: `${color}55`, background: `${color}10` }}
+          >
+            {problem.rating}
+          </span>
+        </div>
       </div>
 
       <h3 className="text-lg font-semibold tracking-tight leading-snug">
@@ -635,10 +852,16 @@ function ProblemCard({ problem, index }: { problem: Problem; index: number }) {
       </div>
 
       <div className="flex items-center gap-2 mt-auto pt-2">
-        <button className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-white text-black text-sm font-semibold px-4 py-2 hover:bg-white/90 transition">
+        <button
+          onClick={() => window.open(problem.url, "_blank", "noopener,noreferrer")}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-white text-black text-sm font-semibold px-4 py-2 hover:bg-white/90 transition"
+        >
           Solve <ChevronRight className="w-4 h-4" />
         </button>
-        <button className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 text-white/80 text-sm font-medium px-3 py-2 hover:bg-white/5 hover:text-white transition">
+        <button
+          onClick={() => window.open(problem.contestUrl, "_blank", "noopener,noreferrer")}
+          className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 text-white/80 text-sm font-medium px-3 py-2 hover:bg-white/5 hover:text-white transition"
+        >
           <ArrowUpRight className="w-3.5 h-3.5" /> Contest
         </button>
       </div>
