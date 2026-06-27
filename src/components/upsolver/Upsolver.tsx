@@ -314,18 +314,32 @@ function UpsolverApp({ username }: { username: string }) {
               <span className="text-sm">Gathering your unsolved problems…</span>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="liquid-glass rounded-2xl p-16 flex flex-col items-center justify-center text-center">
-              <Inbox className="w-7 h-7 text-white/40 mb-3" />
-              <h3 className="text-base font-semibold">Nothing matches those filters</h3>
-              <p className="text-white/50 text-sm mt-1 max-w-xs">
-                Try widening the rating range or removing a tag to see more problems.
-              </p>
-              <button
-                onClick={clearAll}
-                className="mt-5 rounded-full bg-white text-black text-sm font-medium px-4 py-2 hover:bg-white/90"
-              >
-                Reset filters
-              </button>
+            <div className="relative liquid-glass rounded-2xl p-16 flex flex-col items-center justify-center text-center overflow-hidden">
+              {/* soft ambient glow matching the login page palette */}
+              <div className="absolute inset-0 pointer-events-none">
+                <div
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[28rem] h-[18rem] rounded-full opacity-60"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 30% 40%, rgba(0,210,255,0.18), transparent 55%), radial-gradient(circle at 70% 60%, rgba(61,129,227,0.14), transparent 55%)",
+                    filter: "blur(40px)",
+                  }}
+                />
+              </div>
+
+              <div className="relative z-10 flex flex-col items-center">
+                <Inbox className="w-7 h-7 text-white/40 mb-3" />
+                <h3 className="text-base font-semibold">Nothing matches those filters</h3>
+                <p className="text-white/50 text-sm mt-1 max-w-xs">
+                  Try widening the rating range or removing a tag to see more problems.
+                </p>
+                <button
+                  onClick={clearAll}
+                  className="mt-5 rounded-full bg-white text-black text-sm font-medium px-4 py-2 hover:bg-white/90"
+                >
+                  Reset filters
+                </button>
+              </div>
             </div>
           ) : (
             <motion.div
