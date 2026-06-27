@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search, ChevronRight, ChevronDown, X, Filter, Calendar,
@@ -27,6 +27,101 @@ const gradientStyle: React.CSSProperties = {
   color: "transparent",
   WebkitTextFillColor: "transparent",
 };
+
+const BG_VIDEO_URL =
+  "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260508_064122_c4750c0e-7476-4b44-94a2-a85a65c63bf2.mp4";
+
+/**
+ * Fullscreen ambient background video with a seamless, never-resetting loop.
+ * Two stacked <video> elements crossfade near the end of each cycle so the
+ * blue glowing object appears to drift continuously with no visible restart.
+ */
+function BackgroundVideo() {
+  const aRef = useRef<HTMLVideoElement | null>(null);
+  const bRef = useRef<HTMLVideoElement | null>(null);
+  const [activeA, setActiveA] = useState(true);
+  const swappingRef = useRef(false);
+
+  useEffect(() => {
+    const a = aRef.current;
+    const b = bRef.current;
+    if (!a || !b) return;
+
+    a.muted = true; b.muted = true;
+    a.playsInline = true; b.playsInline = true;
+    a.play().catch(() => {});
+
+    const FADE = 1.2; // seconds of crossfade before the clip ends
+
+    const onTime = (current: HTMLVideoElement, other: HTMLVideoElement, isA: boolean) => () => {
+      if (!current.duration || swappingRef.current) return;
+      const remaining = current.duration - current.currentTime;
+      if (remaining <= FADE) {
+        swappingRef.current = true;
+        other.currentTime = 0;
+        other.play().catch(() => {});
+        setActiveA(!isA);
+        window.setTimeout(() => {
+          swappingRef.current = false;
+        }, FADE * 1000);
+      }
+    };
+
+    const onEnded = (el: HTMLVideoElement) => () => {
+      el.currentTime = 0;
+      el.play().catch(() => {});
+    };
+
+    const aTime = onTime(a, b, true);
+    const bTime = onTime(b, a, false);
+    const aEnd = onEnded(a);
+    const bEnd = onEnded(b);
+
+    a.addEventListener("timeupdate", aTime);
+    b.addEventListener("timeupdate", bTime);
+    a.addEventListener("ended", aEnd);
+    b.addEventListener("ended", bEnd);
+
+    return () => {
+      a.removeEventListener("timeupdate", aTime);
+      b.removeEventListener("timeupdate", bTime);
+      a.removeEventListener("ended", aEnd);
+      b.removeEventListener("ended", bEnd);
+    };
+  }, []);
+
+  const baseClass =
+    "absolute inset-0 w-full h-full object-cover transition-opacity duration-[1200ms] ease-linear";
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[#0c0c0c]"
+    >
+      <video
+        ref={aRef}
+        src={BG_VIDEO_URL}
+        autoPlay
+        muted
+        playsInline
+        preload="auto"
+        className={baseClass}
+        style={{ opacity: activeA ? 1 : 0 }}
+      />
+      <video
+        ref={bRef}
+        src={BG_VIDEO_URL}
+        muted
+        playsInline
+        preload="auto"
+        className={baseClass}
+        style={{ opacity: activeA ? 0 : 1 }}
+      />
+      {/* subtle dark veil so foreground content keeps contrast */}
+      <div className="absolute inset-0 bg-[#0c0c0c]/55" />
+    </div>
+  );
+}
 
 export function Upsolver() {
   const [username, setUsername] = useState<string | null>(() => {
@@ -97,6 +192,7 @@ function UpsolverApp({ username }: { username: string }) {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white">
+      <BackgroundVideo />
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 z-0">
         <div
