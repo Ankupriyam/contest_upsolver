@@ -858,7 +858,7 @@ function ProblemCard({ problem, index }: { problem: RuntimeProblem; index: numbe
             e.stopPropagation();
             window.open(problem.url, "_blank", "noopener,noreferrer");
           }}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-white text-black text-sm font-semibold px-4 py-2 hover:bg-white/90 transition"
+          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-white text-black text-sm font-semibold px-4 py-2 hover:bg-white/90 transition cursor-pointer"
         >
           Solve <ChevronRight className="w-4 h-4" />
         </button>
@@ -867,7 +867,7 @@ function ProblemCard({ problem, index }: { problem: RuntimeProblem; index: numbe
             e.stopPropagation();
             window.open(problem.contestUrl, "_blank", "noopener,noreferrer");
           }}
-          className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 text-white/80 text-sm font-medium px-3 py-2 hover:bg-white/5 hover:text-white transition"
+          className="inline-flex items-center justify-center gap-1.5 rounded-full border border-white/15 text-white/80 text-sm font-medium px-3 py-2 hover:bg-white/5 hover:text-white transition cursor-pointer"
         >
           <ArrowUpRight className="w-3.5 h-3.5" /> Contest
         </button>
