@@ -28,7 +28,7 @@ Make sure you have [Node.js](https://nodejs.org/) (v18+) and npm installed.
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/contest-upsolver.git
+   git clone https://github.com/Ankupriyam/contest_upsolver.git
    cd contest-upsolver
    ```
 
@@ -59,7 +59,7 @@ This project is deployed on Vercel.
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/yourusername/contest-upsolver/issues) if you want to contribute.
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/Ankupriyam/contest_upsolver/issues) if you want to contribute.
 
 ## 📝 License
 
